@@ -1,0 +1,247 @@
+#include <iostream>
+#include <vector>
+#include <string>
+#include <sstream>
+#include <fstream>
+#include <algorithm>
+#include <climits>
+#include <cassert>
+
+using namespace std;
+
+const int INVALID = -1;
+const char CSV_DELIMITER = ',';
+const char TIME_DELIMITER = ':';
+const int MINUTES_PER_HOUR = 60;
+const int MIN_VISIT_MINUTES = 15;
+const int MAX_VISIT_MINUTES = 60;
+const string NAME = "name";
+const string OPENING_TIME = "openingTime";
+const string CLOSING_TIME = "closingTime";
+const string RANK = "rank";
+
+struct Time {
+    int h;
+    int m;
+};
+
+
+struct Place {
+    string name;
+    Time openingTime;
+    Time closingTime;
+    int rank;
+};
+
+struct Visit {
+    string name;
+    Time start;
+    Time end;
+};
+
+const Time MOVING_TIME = {0, 30};
+const Time MAX_VISIT_TIME = {1, 0};
+
+vector<Place> tokenize_table(vector<vector<string>>);
+vector<Place> get_places(char*);
+vector<vector<string>> read_csv(char*);
+vector<string> split(string, char);
+Place tokenize(vector<string>, vector<string> header);
+Time get_time(string);
+int find_index_in_vector(const vector<string>&, string);
+int to_minutes(Time);
+Time to_time(int);
+string to_string(Time);
+vector<Visit> find_best_plan(vector<Place>&);
+void print_plan(vector<Visit>&);
+
+int main(int argc, char *argv[]) {
+    if (argc < 2) {
+        cout << "no csv file name in args" << endl;
+        exit(EXIT_FAILURE);
+    }
+    vector<Place> places;
+    places = get_places(argv[1]);
+
+    vector<Visit> plan = find_best_plan(places);
+    print_plan(plan);
+    return 0;
+}
+
+vector<Place> get_places(char* file){
+    vector<vector<string>> table;
+    table = read_csv(file);
+    return tokenize_table(table);
+}
+
+vector<string> split(string line, char delimiter){
+    stringstream stream(line);
+    vector<string> out_list;
+    string block;
+    while(getline(stream, block, delimiter)){
+        out_list.push_back(block);
+    }
+    return  out_list;
+}
+
+vector<vector<string>> read_csv(char* file){
+    string line;
+    fstream fin;
+    fin.open(file, ios::in);
+    vector<vector<string>> table;
+    while(getline(fin, line)){
+        table.push_back(split(line, CSV_DELIMITER));
+    }
+    return table;
+}
+
+vector<Place> tokenize_table(vector<vector<string>> table){
+    vector<Place> tokens;
+    vector<string> header = table[0];
+    for(int i = 1; i < table.size(); i++){
+        tokens.push_back(tokenize(table[i], header));
+    }
+    return tokens;
+}
+
+Place tokenize(vector<string> raw,vector<string> header){
+    Place place;
+    place.name = raw[find_index_in_vector(header, NAME)];
+    place.openingTime = get_time(raw[find_index_in_vector(header, OPENING_TIME)]);
+    place.closingTime = get_time(raw[find_index_in_vector(header, CLOSING_TIME)]);
+    place.rank = stoi(raw[find_index_in_vector(header, RANK)]);
+    return place;
+}
+
+int find_index_in_vector(const vector<string>& vec, string s){
+    for(int i = 0; i < vec.size(); i++){
+        if(vec[i] == s){
+            return i;
+        }
+    }
+    return INVALID;
+}
+
+Time get_time(string in_time){
+    Time time;
+    int col_pos = in_time.find(TIME_DELIMITER);
+    time.h = stoi(in_time.substr(0, col_pos));
+    time.m = stoi(in_time.substr(col_pos + 1, in_time.size() - col_pos));
+    return time;
+}
+
+int to_minutes(Time time){
+    return time.h * MINUTES_PER_HOUR + time.m;
+}
+
+Time to_time(int minutes){
+    return {minutes / MINUTES_PER_HOUR, minutes % MINUTES_PER_HOUR};
+}
+
+string to_string(Time time){
+    char buffer[32] = {};
+    sprintf(buffer, "%02d:%02d", time.h, time.m);
+    return string(buffer);
+}
+
+Time add(Time t1, Time t2){
+    return to_time(to_minutes(t1) + to_minutes(t2));
+}
+
+Time sub_nonneg(Time t1, Time t2){
+    if(to_minutes(t1) < to_minutes(t2)){
+        return {0, 0};
+    }
+    return to_time(to_minutes(t1) - to_minutes(t2));
+}
+
+bool is_visitable(Place place, bool visited, Time current_time){
+    if(visited){
+        return false;
+    }
+    return to_minutes(place.closingTime) - to_minutes(current_time) 
+        >= MIN_VISIT_MINUTES;
+}
+
+vector<int> find_visitable(
+    vector<Place>& places,
+    vector<bool>& visited,
+    Time current_time
+){
+    vector<int> result;
+    for(int i = 0; i < places.size(); ++i){
+        if(is_visitable(places[i], visited[i], current_time)){
+            result.push_back(i);
+        }
+    }
+
+    return result;
+}
+
+bool is_better(Place& p1, Place& p2, Time current_time){
+    int wait1 = to_minutes(sub_nonneg(p1.openingTime, current_time));
+    int wait2 = to_minutes(sub_nonneg(p2.openingTime, current_time));
+    return make_pair(wait1, p1.rank) < make_pair(wait2, p2.rank);
+}
+
+int find_best_visitable(
+    vector<Place>& places,
+    vector<int>& visitables,
+    Time current_time
+){
+    assert(visitables.size() > 0);
+    int best_v = visitables[0];
+
+    for(int i = 0; i < visitables.size(); ++i){
+        Place place = places[visitables[i]];
+        if(is_better(place, places[best_v], current_time)){
+            best_v = visitables[i];
+        }
+    }
+
+    return best_v;
+}
+
+Time max(Time t1, Time t2){
+    return to_minutes(t1) < to_minutes(t2) ? t2 : t1;
+}
+
+Time min(Time t1, Time t2){
+    return to_minutes(t1) > to_minutes(t2) ? t2 : t1;
+}
+
+vector<Visit> find_best_plan(vector<Place>& places){
+    vector<bool> visited(places.size(), false);
+    vector<Visit> plan;
+    Time current_time = {0, 0};
+
+    while(true){
+        vector<int> visitables = find_visitable(places, visited, current_time);
+        if(visitables.empty()){
+            break;
+        }
+        
+        int best_idx = find_best_visitable(places, visitables, current_time);
+        Place best_place = places[best_idx];
+
+        Visit visit;
+        visit.name = best_place.name;
+        visit.start = max(best_place.openingTime, current_time);
+        visit.end = min(best_place.closingTime, add(visit.start, MAX_VISIT_TIME));
+        plan.push_back(visit);
+
+        visited[best_idx] = true;
+        current_time = add(visit.end, MOVING_TIME);
+    }
+
+    return plan;
+}
+
+void print_plan(vector<Visit>& plan){
+    for(int i = 0; i < plan.size(); ++i){
+        cout << "Location " << plan[i].name << endl;
+        cout << "Visit from " << to_string(plan[i].start);
+        cout << " until " << to_string(plan[i].end) << endl;
+        cout << "---" << endl;
+    }
+}

@@ -1,0 +1,300 @@
+#include <iostream>
+#include <vector>
+#include <string>
+#include <sstream>
+#include <algorithm>
+#include <iomanip>
+
+using namespace std;
+
+#define YES_REPRESENTATION "YES"
+#define NO_REPRESENTATION "NO"
+#define IF_NECESSARY_REPRESENTATION "IF_NECESSARY"
+#define TIME_SLOTS_DELIMITER "###"
+#define AFTER_VOTE_STATUS_DELIMITER ": "
+#define AFTER_TIME_SLOT_DELIMITER ":"
+
+constexpr int BEST_TIME_SLOTS_COUNT = 3;
+
+typedef int TimeSlotId;
+typedef string Participant;
+
+enum VoteStatus
+{
+    YES,
+    NO,
+    IF_NECESSARY
+};
+
+struct TimeSlotVote
+{
+    TimeSlotId time_slot_id;
+    VoteStatus vote_status;
+};
+
+struct ParticipantVoteMap
+{
+    Participant participant;
+    vector<TimeSlotVote> time_slot_votes;
+};
+
+struct VotesAggregateStatus
+{
+    vector<Participant> yes_participants;
+    vector<Participant> no_participants;
+    vector<Participant> if_necessary_participants;
+} typedef VotesAggregateStatus;
+
+struct TimeSlotVotesAggregateStatus
+{
+    TimeSlotId time_slot_id;
+    VotesAggregateStatus votes_aggregate_status;
+};
+
+typedef vector<TimeSlotVote> VoteMap;
+typedef vector<ParticipantVoteMap> Votes;
+
+struct Input
+{
+    int time_slots_count;
+    vector<Participant> participants;
+    Votes votes;
+};
+
+VoteStatus vote_status_from_string(string vote_status_string)
+{
+    if (vote_status_string == YES_REPRESENTATION)
+    {
+        return YES;
+    }
+    else if (vote_status_string == NO_REPRESENTATION)
+    {
+        return NO;
+    }
+    else
+    {
+        return IF_NECESSARY;
+    }
+}
+
+vector<string> split(string str, char delimiter)
+{
+    vector<string> splitted;
+    stringstream ss(str);
+
+    string s;
+    while (getline(ss, s, delimiter))
+        splitted.push_back(s);
+    return splitted;
+}
+
+int read_time_slots_count()
+{
+    string time_slots_count_str;
+    getline(cin, time_slots_count_str);
+    return stoi(time_slots_count_str);
+}
+
+vector<Participant> read_participants()
+{
+    string participants_line;
+    getline(cin, participants_line);
+    constexpr char PARTICIPANTS_DELIMITER = ' ';
+    vector<Participant> participants = split(participants_line, PARTICIPANTS_DELIMITER);
+    return participants;
+}
+
+VoteMap parse_votes_line(string votes_line)
+{
+    VoteMap votes;
+    constexpr char VOTES_DELIMITER = '|';
+    vector<string> splitted_votes = split(votes_line, VOTES_DELIMITER);
+    for (int i = 0; i < splitted_votes.size(); i++)
+    {
+        string vote_line = splitted_votes[i];
+        constexpr char VOTE_DELIMITER = ' ';
+        vector<string> splitted_vote = split(vote_line, VOTE_DELIMITER);
+        constexpr int TIME_SLOT_ID_INDEX = 0;
+        constexpr int VOTE_STATUS_INDEX = 1;
+        int time_slot_id = stoi(splitted_vote[TIME_SLOT_ID_INDEX]);
+        VoteStatus status = vote_status_from_string(splitted_vote[VOTE_STATUS_INDEX]);
+        votes.push_back(TimeSlotVote{time_slot_id, status});
+    }
+    return votes;   
+}
+
+Votes read_votes()
+{
+    Votes votes;
+    string votes_line;
+    while(getline(cin, votes_line))
+    {
+        constexpr char VOTES_LINE_DELIMITER = ':';
+        vector<string> splitted_votes_line = split(votes_line, VOTES_LINE_DELIMITER);
+        constexpr int PARTICIPANT_INDEX = 0;
+        constexpr int VOTES_INDEX = 1;
+        Participant participant = splitted_votes_line[PARTICIPANT_INDEX];
+        VoteMap participant_votes = parse_votes_line(splitted_votes_line[VOTES_INDEX]);
+        votes.push_back(ParticipantVoteMap{participant, participant_votes});
+    }
+    return votes;
+}
+
+Input read_input()
+{
+    Input input;
+    input.time_slots_count = read_time_slots_count();
+    input.participants = read_participants();
+    input.votes = read_votes();
+    return input;
+}
+
+vector<TimeSlotVotesAggregateStatus> add_if_neccessary_votes(vector<TimeSlotVotesAggregateStatus> votes_aggregate_status, vector<Participant> participants, int time_slots_count)
+{
+    for (Participant participant : participants)
+    {
+        for (int i = 0; i < time_slots_count; i++)
+        {
+            vector<Participant> yes_participants = votes_aggregate_status[i].votes_aggregate_status.yes_participants;
+            vector<Participant> no_participants = votes_aggregate_status[i].votes_aggregate_status.no_participants;
+            vector<Participant> if_necessary_participants = votes_aggregate_status[i].votes_aggregate_status.if_necessary_participants;
+
+            if (find(yes_participants.begin(), yes_participants.end(), participant) == yes_participants.end() &&
+                find(no_participants.begin(), no_participants.end(), participant) == no_participants.end() &&
+                find(if_necessary_participants.begin(), if_necessary_participants.end(), participant) == if_necessary_participants.end())
+            {
+                votes_aggregate_status[i].votes_aggregate_status.if_necessary_participants.push_back(participant);
+            }
+        }
+    }
+    return votes_aggregate_status;
+}
+
+bool time_slot_exists(vector<TimeSlotVotesAggregateStatus> votes_aggregate_status, int time_slot_id)
+{
+    for (TimeSlotVotesAggregateStatus time_slot_votes_aggregate_status : votes_aggregate_status)
+    {
+        if (time_slot_votes_aggregate_status.time_slot_id == time_slot_id)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+vector<TimeSlotVotesAggregateStatus> initialize_votes_aggregate_status(int time_slots_count)
+{
+    vector<TimeSlotVotesAggregateStatus> votes_aggregate_status;
+    for (int i = 0; i < time_slots_count; i++)
+    {
+        votes_aggregate_status.push_back({i, VotesAggregateStatus()});
+        votes_aggregate_status[i].votes_aggregate_status.yes_participants = vector<Participant>();
+        votes_aggregate_status[i].votes_aggregate_status.no_participants = vector<Participant>();
+        votes_aggregate_status[i].votes_aggregate_status.if_necessary_participants = vector<Participant>();
+    }
+    return votes_aggregate_status;
+}
+
+vector<TimeSlotVotesAggregateStatus> aggregate_votes(Votes votes, vector<Participant> participants, int time_slots_count)
+{
+    vector<TimeSlotVotesAggregateStatus> votes_aggregate_status = initialize_votes_aggregate_status(time_slots_count);
+    for (ParticipantVoteMap vote : votes)
+    {
+        for (TimeSlotVote vote_data : vote.time_slot_votes)
+        {
+            TimeSlotId time_slot_id = vote_data.time_slot_id;
+            if (vote_data.vote_status == YES)
+                votes_aggregate_status[time_slot_id].votes_aggregate_status.yes_participants.push_back(vote.participant);
+            else if (vote_data.vote_status == NO)
+                votes_aggregate_status[time_slot_id].votes_aggregate_status.no_participants.push_back(vote.participant);
+            else if (vote_data.vote_status == IF_NECESSARY)
+                votes_aggregate_status[time_slot_id].votes_aggregate_status.if_necessary_participants.push_back(vote.participant);
+        }
+    }
+    votes_aggregate_status = add_if_neccessary_votes(votes_aggregate_status, participants, time_slots_count);
+    return votes_aggregate_status;
+}
+
+bool cmp_time_slot(const TimeSlotVotesAggregateStatus& a, const TimeSlotVotesAggregateStatus& b)
+{
+    if (a.votes_aggregate_status.no_participants.size() < b.votes_aggregate_status.no_participants.size())
+        return true;
+    else if (a.votes_aggregate_status.no_participants.size() == b.votes_aggregate_status.no_participants.size())
+    {
+        if (a.votes_aggregate_status.if_necessary_participants.size() < b.votes_aggregate_status.if_necessary_participants.size())
+            return true;
+        else if (a.votes_aggregate_status.if_necessary_participants.size() == b.votes_aggregate_status.if_necessary_participants.size() && a.time_slot_id < b.time_slot_id)
+            return true;
+        else
+            return false;
+    }
+    else
+        return false;
+}
+
+vector<TimeSlotVotesAggregateStatus> get_ordered_best_time_slots(vector<TimeSlotVotesAggregateStatus> votes_aggregate_status)
+{
+    sort(votes_aggregate_status.begin(), votes_aggregate_status.end(), cmp_time_slot);
+    return votes_aggregate_status;
+}
+
+void print_time_slot(TimeSlotId time_slot_id)
+{
+    const string TIME_SLOT_PREFIX = "Time slot ";
+    cout << TIME_SLOT_PREFIX << time_slot_id;
+}
+
+bool cmp_participant(const Participant& a, const Participant& b, vector<Participant> participants)
+{
+    return find(participants.begin(), participants.end(), a) < find(participants.begin(), participants.end(), b);
+}
+
+vector<Participant> sort_participants(vector<Participant> participants, vector<Participant> initial_ordered_participants)
+{
+    sort(participants.begin(), participants.end(), [&](const Participant& a, const Participant& b) {
+        return cmp_participant(a, b, initial_ordered_participants);
+    });
+    return participants;
+}
+
+void print_participants(vector<Participant> participants, vector<Participant> initial_ordered_participants)
+{
+    const string PARTICIPANTS_DILIMITER = " ";
+    participants = sort_participants(participants, initial_ordered_participants);
+    for (Participant participant : participants)
+        cout << participant << PARTICIPANTS_DILIMITER;
+}
+
+void print_time_slot(TimeSlotId time_slot_id, VotesAggregateStatus votes_aggregate_status, vector<Participant> participants)
+{
+    print_time_slot(time_slot_id);
+    cout << AFTER_TIME_SLOT_DELIMITER << endl;
+    cout << YES_REPRESENTATION << AFTER_VOTE_STATUS_DELIMITER;
+    print_participants(votes_aggregate_status.yes_participants, participants);
+    cout << endl;
+    cout << NO_REPRESENTATION << AFTER_VOTE_STATUS_DELIMITER;
+    print_participants(votes_aggregate_status.no_participants, participants);
+    cout << endl;
+    cout << IF_NECESSARY_REPRESENTATION << AFTER_VOTE_STATUS_DELIMITER;
+    print_participants(votes_aggregate_status.if_necessary_participants, participants);
+    cout << endl;
+}
+
+void print_best_time_slots(int count, vector<TimeSlotVotesAggregateStatus> ordered_best_time_slots, vector<Participant> participants)
+{
+
+    for (int i = 0; i < count && i < ordered_best_time_slots.size(); i++)
+    {
+        print_time_slot(ordered_best_time_slots[i].time_slot_id, ordered_best_time_slots[i].votes_aggregate_status, participants);
+        cout << TIME_SLOTS_DELIMITER << endl;
+    }
+}
+
+int main()
+{
+    Input input = read_input(); 
+    vector<TimeSlotVotesAggregateStatus> votes_aggregate_status = aggregate_votes(input.votes, input.participants, input.time_slots_count);
+    vector<TimeSlotVotesAggregateStatus> ordered_best_time_slots = get_ordered_best_time_slots(votes_aggregate_status);
+    print_best_time_slots(BEST_TIME_SLOTS_COUNT, ordered_best_time_slots, input.participants);
+    return 0;
+}

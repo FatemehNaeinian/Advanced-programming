@@ -1,0 +1,16 @@
+window_size 640 640
+ball 200 200
+normal_area 0 0 640 320
+water_area 320 320 640 160
+normal_area 0 320 128 160
+normal_area 256 320 64 160
+normal_area 0 480 640 160
+normal_area 128 320 128 160
+wall 0 0 640 10
+wall 0 0 10 640
+wall 630 0 10 640
+wall 0 630 640 10
+wall 300 300 128 10
+wall 290 246 10 64
+hole 160 512
+sharp_wall 268 64 128 10
